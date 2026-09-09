@@ -18,27 +18,26 @@ function jsonToDotStrings(jsonObj) {
 }
 
 function getProjectName() {
-	if(_context.opts.cordova.platforms.indexOf('ios') !== -1){
-		const projectRoot = _context.opts.projectRoot;
-		const platformPath = path.join(projectRoot, 'platforms', 'ios');
-		const cordova_ios = require('cordova-ios');
-		const iosProject = new cordova_ios('ios', platformPath);
+	const platformPath = path.join(process.cwd(), 'platforms', 'ios');
 
-		return path.basename(iosProject.locations.xcodeCordovaProj);
+	// cordova-ios 8+ : le projet s'appelle toujours "App"
+	if (fs.existsSync(path.join(platformPath, 'App.xcodeproj'))) {
+		return 'App';
 	}
+
 	// Valid matches
-	// '<name>Application one</name>',
-  // '<name short="App1">Application one</name>',
-  // '<name xmlns:widget="http://www.w3.org/ns/widgets">Application one</name>',
-	// '<name >Application one</name>',
-  // `<name
-  //  >Application one</name>`,
+	// '<n>Application one</n>',
+	// '<name short="App1">Application one</n>',
+	// '<name xmlns:widget="http://www.w3.org/ns/widgets">Application one</n>',
+	// '<name >Application one</n>',
+	// `<name
+	//  >Application one</n>`,
 	//
 	// Invalid matches
-	// '<name2>Application one</name>',
-  // '<namefoo>Application one</name>',
-  // '<name!!>Application one</name>',
-	const regExpression = "<name(?=[\\s>])[^>]*>(.*?)</name>";
+	// '<name2>Application one</n>',
+	// '<namefoo>Application one</n>',
+	// '<name!!>Application one</n>',
+	const regExpression = "<name(?=[\\s>])[^>]*>(.*?)</n>";
 
 	var config = fs.readFileSync("config.xml").toString();
 	var matches = config.match(new RegExp(regExpression, "i"));
