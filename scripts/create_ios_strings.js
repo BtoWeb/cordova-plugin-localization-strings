@@ -77,6 +77,15 @@ function writeStringFile(plistStringJsonObj, lang, fileName, bundle) {
 	});
 }
 
+function findResourcesGroupKey(proj) {
+	// cordova-ios 8+ : le groupe "Resources" n'a qu'un "path", pas de "name",
+	// donc findPBXGroupKey({name: 'Resources'}) ne le trouve pas.
+	return (
+		proj.findPBXGroupKey({ path: "Resources" }) ||
+		proj.findPBXGroupKey({ name: "Resources" })
+	);
+}
+
 function writeLocalisationFieldsToXcodeProj(filePaths, groupName, proj) {
 	var fileRefSection = proj.pbxFileReferenceSection();
 	var fileRefValues = _.values(fileRefSection);
@@ -84,10 +93,17 @@ function writeLocalisationFieldsToXcodeProj(filePaths, groupName, proj) {
 	if (filePaths.length > 0) {
 		var groupKey = proj.findPBXVariantGroupKey({ name: groupName });
 		if (!groupKey) {
-			// findPBXVariantGroupKey with name InfoPlist.strings not found. creating new group
-			var localizableStringVarGroup =
-				proj.addLocalizationVariantGroup(groupName);
-			groupKey = localizableStringVarGroup.fileRef;
+			var resourceGroupKey = findResourcesGroupKey(proj);
+			groupKey = proj.pbxCreateVariantGroup(groupName);
+			proj.addToPbxGroup(groupKey, resourceGroupKey);
+
+			var localizationVariantGroup = {
+				uuid: proj.generateUuid(),
+				fileRef: groupKey,
+				basename: groupName,
+			};
+			proj.addToPbxBuildFileSection(localizationVariantGroup);
+			proj.addToPbxResourcesBuildPhase(localizationVariantGroup);
 		}
 
 		filePaths.forEach(function (filePath) {
@@ -99,20 +115,10 @@ function writeLocalisationFieldsToXcodeProj(filePaths, groupName, proj) {
 				);
 			});
 			if (_.isUndefined(results)) {
-				// not found in pbxFileReference yet
-
-				// resource path used by cordova-ios 7.x and earlier
-				var resourcePath = "Resources/" + filePath;
-
-				// resource path used by cordova-ios 8.x and later
-				if (fs.existsSync(path.join("platforms", "ios", "App.xcodeproj"))) {
-					resourcePath = "App/Resources/" + filePath;
-				}
-				proj.addResourceFile(
-					resourcePath,
-					{ variantGroup: true },
-					groupKey
-				);
+				// filePath (ex: "fr.lproj/InfoPlist.strings") est déjà relatif
+				// au groupe "Resources" — ne PAS le préfixer de "App/Resources/",
+				// l'imbrication du groupe s'en charge déjà.
+				proj.addResourceFile(filePath, { variantGroup: true }, groupKey);
 			}
 		});
 	}
@@ -220,7 +226,7 @@ module.exports = function (context) {
 		return new Promise(function (resolve, reject) {
 			proj.parse(function (error) {
 				if (error) {
-					reject(error);
+					return reject(error);
 				}
 
 				writeLocalisationFieldsToXcodeProj(
